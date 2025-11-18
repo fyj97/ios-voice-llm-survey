@@ -330,6 +330,52 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
     @IBAction func aggregateButtonTapped(_ sender: UIButton) {
         animateButton(sender)
         
+        // Show action menu
+        let alert = UIAlertController(
+            title: "Aggregate Results",
+            message: "Please select an action",
+            preferredStyle: .actionSheet
+        )
+        
+        // Option 1: View
+        alert.addAction(UIAlertAction(title: "View", style: .default) { [weak self] _ in
+            self?.performAggregation(action: .view)
+        })
+        
+        // Option 2: Export JSON
+        alert.addAction(UIAlertAction(title: "Export JSON", style: .default) { [weak self] _ in
+            self?.performAggregation(action: .export)
+        })
+        
+        // Option 3: Cancel
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        
+        // iPad support
+        if let popover = alert.popoverPresentationController {
+            popover.sourceView = sender
+            popover.sourceRect = sender.bounds
+        }
+        
+        present(alert, animated: true)
+    }
+    
+    // Aggregation action type
+    private enum AggregationAction {
+        case view
+        case export
+    }
+    
+    // Aggregation result data structure
+    private struct AggregationResult {
+        let summary: String
+        let statistics: [Int: [String: Int]]
+        let answerDisplayNames: [Int: [String: String]]
+        let questionTexts: [Int: String]
+        let processedFiles: Int
+    }
+    
+    // Perform aggregation operation
+    private func performAggregation(action: AggregationAction) {
         statusLabel.text = "Aggregating historical responses..."
         statusLabel.textColor = .systemBlue
         aggregateButton.isEnabled = false
@@ -434,10 +480,25 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
                     summary += "\n"
                 }
                 
+                let result = AggregationResult(
+                    summary: summary,
+                    statistics: statistics,
+                    answerDisplayNames: answerDisplayNames,
+                    questionTexts: questionTexts,
+                    processedFiles: processedFiles
+                )
+                
                 DispatchQueue.main.async {
                     self.statusLabel.text = "Aggregation complete. Processed \(processedFiles) record(s)"
                     self.statusLabel.textColor = .systemGreen
-                    self.showScrollableContent(title: "Aggregation Results", content: summary)
+                    
+                    switch action {
+                    case .view:
+                        self.showScrollableContent(title: "Aggregation Results", content: result.summary)
+                    case .export:
+                        self.exportAggregationJSON(result: result)
+                    }
+                    
                     self.aggregateButton.isEnabled = true
                     self.aggregateButton.alpha = 1.0
                 }
@@ -450,6 +511,91 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
                     self.aggregateButton.alpha = 1.0
                 }
             }
+        }
+    }
+    
+    // Export aggregation results as JSON
+    private func exportAggregationJSON(result: AggregationResult) {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let timestampString = dateFormatter.string(from: Date())
+        
+        // Build JSON data structure
+        var jsonData: [String: Any] = [
+            "export_info": [
+                "export_time": timestampString,
+                "total_files_processed": result.processedFiles,
+                "questionnaire_title": questionnaireData?.questionnaire.title ?? "Unknown"
+            ],
+            "aggregation_summary": result.summary,
+            "statistics": [:]
+        ]
+        
+        // Add statistics
+        let sortedQuestionIds = result.statistics.keys.sorted()
+        var statisticsDict: [String: Any] = [:]
+        
+        for questionId in sortedQuestionIds {
+            let questionTitle = result.questionTexts[questionId] ?? "Question \(questionId)"
+            var questionData: [String: Any] = [
+                "question_id": questionId,
+                "question_text": questionTitle,
+                "answers": []
+            ]
+            
+            let answerCounts = result.statistics[questionId] ?? [:]
+            let sortedAnswers = answerCounts.sorted { lhs, rhs in
+                if lhs.value == rhs.value {
+                    return lhs.key < rhs.key
+                }
+                return lhs.value > rhs.value
+            }
+            
+            var answersArray: [[String: Any]] = []
+            for (answerKey, count) in sortedAnswers {
+                let displayText = result.answerDisplayNames[questionId]?[answerKey] ?? answerKey
+                answersArray.append([
+                    "answer": displayText,
+                    "count": count
+                ])
+            }
+            
+            questionData["answers"] = answersArray
+            statisticsDict["question_\(questionId)"] = questionData
+        }
+        
+        jsonData["statistics"] = statisticsDict
+        
+        // Convert to JSON data
+        guard let jsonDataEncoded = try? JSONSerialization.data(withJSONObject: jsonData, options: .prettyPrinted) else {
+            showMessage("JSON conversion failed")
+            return
+        }
+        
+        // Save to temporary file
+        let fileName = "aggregation_results_\(Date().timeIntervalSince1970).json"
+        let tempDirectory = FileManager.default.temporaryDirectory
+        let fileURL = tempDirectory.appendingPathComponent(fileName)
+        
+        do {
+            try jsonDataEncoded.write(to: fileURL)
+            
+            // Use share functionality
+            let activityViewController = UIActivityViewController(
+                activityItems: [fileURL],
+                applicationActivities: nil
+            )
+            
+            // iPad support
+            if let popover = activityViewController.popoverPresentationController {
+                popover.sourceView = aggregateButton
+                popover.sourceRect = aggregateButton.bounds
+            }
+            
+            present(activityViewController, animated: true)
+            
+        } catch {
+            showMessage("Failed to save file: \(error.localizedDescription)")
         }
     }
     
