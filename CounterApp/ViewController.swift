@@ -11,6 +11,7 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
     @IBOutlet weak var llmButton: UIButton!
     @IBOutlet weak var exportButton: UIButton!
     @IBOutlet weak var aggregateButton: UIButton!
+    private var clearButton: UIButton?  // Created programmatically
     
     // Recording state
     private var isRecording = false
@@ -44,7 +45,16 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
             target: self,
             action: #selector(settingsButtonTapped)
         )
-        navigationItem.rightBarButtonItem = settingsButton
+        
+        // Add questionnaire button to navigation bar
+        let questionnaireButton = UIBarButtonItem(
+            image: UIImage(systemName: "doc.text"),
+            style: .plain,
+            target: self,
+            action: #selector(questionnaireButtonTapped)
+        )
+        
+        navigationItem.rightBarButtonItems = [settingsButton, questionnaireButton]
         
         // Request microphone permission
         requestMicrophonePermission()
@@ -73,6 +83,26 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
         
         // Setup aggregate button
         setupButton(aggregateButton, title: "Aggregate Results", backgroundColor: .systemTeal)
+        
+        // Create and setup clear button programmatically
+        let clearBtn = UIButton(type: .system)
+        clearBtn.translatesAutoresizingMaskIntoConstraints = false
+        clearBtn.setTitle("Clear JSON Files", for: .normal)
+        clearBtn.backgroundColor = .systemOrange
+        clearBtn.setTitleColor(.white, for: .normal)
+        clearBtn.layer.cornerRadius = 12
+        clearBtn.titleLabel?.font = UIFont.systemFont(ofSize: 18, weight: .semibold)
+        clearBtn.addTarget(self, action: #selector(clearButtonTapped(_:)), for: .touchUpInside)
+        view.addSubview(clearBtn)
+        self.clearButton = clearBtn
+        
+        // Add constraints for clear button - positioned below aggregate button
+        NSLayoutConstraint.activate([
+            clearBtn.topAnchor.constraint(equalTo: aggregateButton.bottomAnchor, constant: 16),
+            clearBtn.leadingAnchor.constraint(equalTo: aggregateButton.leadingAnchor),
+            clearBtn.trailingAnchor.constraint(equalTo: aggregateButton.trailingAnchor),
+            clearBtn.heightAnchor.constraint(equalToConstant: 50)
+        ])
         
         // Initial state: play, LLM and export buttons disabled
         playButton.isEnabled = false
@@ -359,6 +389,77 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
         present(alert, animated: true)
     }
     
+    @objc func clearButtonTapped(_ sender: UIButton) {
+        animateButton(sender)
+        
+        let alert = UIAlertController(
+            title: "Clear JSON Files",
+            message: "Are you sure you want to delete all exported JSON questionnaire response files? This action cannot be undone.",
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { [weak self] _ in
+            self?.clearAllJSONFiles()
+        })
+        
+        present(alert, animated: true)
+    }
+    
+    private func clearAllJSONFiles() {
+        statusLabel.text = "Clearing JSON files..."
+        statusLabel.textColor = .systemOrange
+        clearButton?.isEnabled = false
+        clearButton?.alpha = 0.5
+        
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                let exportsDirectory = try self.ensureExportsDirectory()
+                let fileManager = FileManager.default
+                
+                // Get all JSON files
+                let fileURLs = try fileManager.contentsOfDirectory(
+                    at: exportsDirectory,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles]
+                ).filter { $0.pathExtension.lowercased() == "json" }
+                
+                var deletedCount = 0
+                for fileURL in fileURLs {
+                    do {
+                        try fileManager.removeItem(at: fileURL)
+                        deletedCount += 1
+                    } catch {
+                        print("Failed to delete file \(fileURL.lastPathComponent): \(error)")
+                    }
+                }
+                
+                DispatchQueue.main.async {
+                    self.statusLabel.text = "Cleared \(deletedCount) JSON file(s)"
+                    self.statusLabel.textColor = .systemGreen
+                    self.clearButton?.isEnabled = true
+                    self.clearButton?.alpha = 1.0
+                    
+                    if deletedCount > 0 {
+                        self.showMessage("Successfully deleted \(deletedCount) JSON questionnaire response file(s)")
+                    } else {
+                        self.showMessage("No JSON files found to delete")
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.statusLabel.text = "Clear failed"
+                    self.statusLabel.textColor = .systemRed
+                    self.showMessage("Unable to access export directory: \(error.localizedDescription)")
+                    self.clearButton?.isEnabled = true
+                    self.clearButton?.alpha = 1.0
+                }
+            }
+        }
+    }
+    
     // Aggregation action type
     private enum AggregationAction {
         case view
@@ -400,9 +501,26 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
                     return
                 }
                 
+                // Get all question IDs
+                let allQuestionIds: Set<Int>
+                if let questions = self.questionnaireData?.questionnaire.questions {
+                    allQuestionIds = Set(questions.map { $0.id })
+                } else {
+                    allQuestionIds = Set()
+                }
+                
                 var statistics: [Int: [String: Int]] = [:]
                 var answerDisplayNames: [Int: [String: String]] = [:]
                 var questionTexts: [Int: String] = [:]
+                
+                // Initialize statistics for all questions
+                for questionId in allQuestionIds {
+                    statistics[questionId] = [
+                        "yes": 0,
+                        "no": 0,
+                        "unanswered": 0
+                    ]
+                }
                 
                 if let questions = self.questionnaireData?.questionnaire.questions {
                     for question in questions {
@@ -412,41 +530,91 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
                 
                 let decoder = JSONDecoder()
                 var processedFiles = 0
+                var allResponseQuestionIds: Set<Int> = []
                 
+                // First pass: collect all question IDs that appear in responses
                 for fileURL in fileURLs {
                     do {
                         let data = try Data(contentsOf: fileURL)
                         let exportEntry = try decoder.decode(ExportedSurvey.self, from: data)
-                        processedFiles += 1
                         
                         for item in exportEntry.matchedQuestions {
-                            guard let answer = item.extractedAnswer?.trimmingCharacters(in: .whitespacesAndNewlines), !answer.isEmpty else {
-                                continue
-                            }
-                            
-                            let normalizedAnswer = answer.lowercased()
-                            statistics[item.matchedQuestionId, default: [:]][normalizedAnswer, default: 0] += 1
-                            
-                            if answerDisplayNames[item.matchedQuestionId] == nil {
-                                answerDisplayNames[item.matchedQuestionId] = [:]
-                            }
-                            
-                            if answerDisplayNames[item.matchedQuestionId]?[normalizedAnswer] == nil {
-                                answerDisplayNames[item.matchedQuestionId]?[normalizedAnswer] = answer
-                            }
-                            
-                            if questionTexts[item.matchedQuestionId] == nil {
-                                questionTexts[item.matchedQuestionId] = item.matchedQuestion
-                            }
+                            allResponseQuestionIds.insert(item.matchedQuestionId)
                         }
                     } catch {
                         print("Failed to process file \(fileURL.lastPathComponent): \(error)")
                     }
                 }
                 
-                let nonEmptyStats = statistics.filter { !$0.value.isEmpty }
+                // Second pass: process responses in each file
+                for fileURL in fileURLs {
+                    do {
+                        let data = try Data(contentsOf: fileURL)
+                        let exportEntry = try decoder.decode(ExportedSurvey.self, from: data)
+                        processedFiles += 1
+                        
+                        // Track question IDs that appear in this response
+                        var currentResponseQuestionIds: Set<Int> = []
+                        
+                        for item in exportEntry.matchedQuestions {
+                            currentResponseQuestionIds.insert(item.matchedQuestionId)
+                            
+                            guard let answer = item.extractedAnswer?.trimmingCharacters(in: .whitespacesAndNewlines), !answer.isEmpty else {
+                                continue
+                            }
+                            
+                            // Classify answer type: yes, no, or other
+                            let normalizedAnswer = answer.lowercased()
+                            let answerType: String
+                            
+                            if normalizedAnswer.contains("yes") || normalizedAnswer.contains("是") || 
+                               normalizedAnswer.contains("有") || normalizedAnswer.contains("存在") ||
+                               normalizedAnswer.contains("good") || normalizedAnswer.contains("safe") ||
+                               normalizedAnswer.contains("well") || normalizedAnswer.contains("appealing") {
+                                answerType = "yes"
+                            } else if normalizedAnswer.contains("no") || normalizedAnswer.contains("否") || 
+                                      normalizedAnswer.contains("没有") || normalizedAnswer.contains("不存在") ||
+                                      normalizedAnswer.contains("unsafe") || normalizedAnswer.contains("poor") ||
+                                      normalizedAnswer.contains("unappealing") {
+                                answerType = "no"
+                            } else {
+                                // Cannot determine, keep original answer for display
+                                answerType = normalizedAnswer
+                            }
+                            
+                            statistics[item.matchedQuestionId, default: [:]][answerType, default: 0] += 1
+                            
+                            if answerDisplayNames[item.matchedQuestionId] == nil {
+                                answerDisplayNames[item.matchedQuestionId] = [:]
+                            }
+                            
+                            // Save original answer for display (if yes/no type, save an example)
+                            if answerType == "yes" || answerType == "no" {
+                                if answerDisplayNames[item.matchedQuestionId]?[answerType] == nil {
+                                    answerDisplayNames[item.matchedQuestionId]?[answerType] = answerType == "yes" ? "Yes" : "No"
+                                }
+                            } else {
+                                answerDisplayNames[item.matchedQuestionId]?[answerType] = answer
+                            }
+                            
+                            if questionTexts[item.matchedQuestionId] == nil {
+                                questionTexts[item.matchedQuestionId] = item.matchedQuestion
+                            }
+                        }
+                        
+                        // For questions that don't appear in this response, mark as unanswered
+                        for questionId in allQuestionIds {
+                            if !currentResponseQuestionIds.contains(questionId) {
+                                statistics[questionId, default: [:]]["unanswered", default: 0] += 1
+                            }
+                        }
+                        
+                    } catch {
+                        print("Failed to process file \(fileURL.lastPathComponent): \(error)")
+                    }
+                }
                 
-                if nonEmptyStats.isEmpty {
+                if processedFiles == 0 {
                     DispatchQueue.main.async {
                         self.statusLabel.text = "No valid response data found"
                         self.statusLabel.textColor = .systemOrange
@@ -458,23 +626,32 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
                 }
                 
                 var summary = "Analyzed \(processedFiles) export file(s).\n\n"
-                let sortedQuestionIds = nonEmptyStats.keys.sorted()
+                let sortedQuestionIds = allQuestionIds.sorted()
                 
                 for questionId in sortedQuestionIds {
                     let questionTitle = questionTexts[questionId] ?? "Question \(questionId)"
                     summary += "Question \(questionId): \(questionTitle)\n"
                     
-                    let answerCounts = nonEmptyStats[questionId] ?? [:]
-                    let sortedAnswers = answerCounts.sorted { lhs, rhs in
-                        if lhs.value == rhs.value {
-                            return lhs.key < rhs.key
-                        }
-                        return lhs.value > rhs.value
+                    let answerCounts = statistics[questionId] ?? [:]
+                    
+                    // Display yes, no, unanswered statistics
+                    let yesCount = answerCounts["yes"] ?? 0
+                    let noCount = answerCounts["no"] ?? 0
+                    let unansweredCount = answerCounts["unanswered"] ?? 0
+                    let totalCount = yesCount + noCount + unansweredCount
+                    
+                    if totalCount > 0 {
+                        summary += "  Total: \(totalCount) response(s)\n"
+                        summary += "  Yes: \(yesCount) (\(totalCount > 0 ? Int(Double(yesCount) / Double(totalCount) * 100) : 0)%)\n"
+                        summary += "  No: \(noCount) (\(totalCount > 0 ? Int(Double(noCount) / Double(totalCount) * 100) : 0)%)\n"
+                        summary += "  Unanswered: \(unansweredCount) (\(totalCount > 0 ? Int(Double(unansweredCount) / Double(totalCount) * 100) : 0)%)\n"
                     }
                     
-                    for (answerKey, count) in sortedAnswers {
+                    // Display other answer types (if any)
+                    let otherAnswers = answerCounts.filter { $0.key != "yes" && $0.key != "no" && $0.key != "unanswered" }
+                    for (answerKey, count) in otherAnswers.sorted(by: { $0.value > $1.value }) {
                         let displayText = answerDisplayNames[questionId]?[answerKey] ?? answerKey
-                        summary += "  - \(displayText): \(count) responses\n"
+                        summary += "  - \(displayText): \(count)\n"
                     }
                     
                     summary += "\n"
@@ -619,10 +796,21 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
     
     // MARK: - Permission Requests
     private func requestMicrophonePermission() {
-        AVAudioSession.sharedInstance().requestRecordPermission { granted in
-            DispatchQueue.main.async {
-                if !granted {
-                    self.showMessage("Microphone permission is required to record")
+        if #available(iOS 17.0, *) {
+            AVAudioApplication.requestRecordPermission { granted in
+                DispatchQueue.main.async {
+                    if !granted {
+                        self.showMessage("Microphone permission is required to record")
+                    }
+                }
+            }
+        } else {
+            // Fallback for iOS < 17.0
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                DispatchQueue.main.async {
+                    if !granted {
+                        self.showMessage("Microphone permission is required to record")
+                    }
                 }
             }
         }
@@ -844,6 +1032,14 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
     // MARK: - Settings & API Key Management
     @objc private func settingsButtonTapped() {
         showAPIKeySettings()
+    }
+    
+    @objc private func questionnaireButtonTapped() {
+        let questionnaireVC = QuestionnaireViewController(transitionStyle: .scroll, navigationOrientation: .horizontal)
+        questionnaireVC.modalPresentationStyle = .fullScreen
+        
+        let navController = UINavigationController(rootViewController: questionnaireVC)
+        present(navController, animated: true)
     }
     
     private func checkAPIKeyStatus() {
