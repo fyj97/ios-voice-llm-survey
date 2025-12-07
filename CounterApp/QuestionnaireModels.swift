@@ -27,6 +27,46 @@ struct Question: Codable {
     }
 }
 
+// MARK: - Respondent Information Models
+struct RespondentInfo: Codable {
+    let name: String
+    let age: Int
+    let gender: String
+    let phone: String
+    let location: String
+}
+
+// MARK: - Exported Survey Models
+struct ExportedSurvey: Decodable {
+    let matchedQuestions: [ExportedMatchedQuestion]
+    let respondentInfo: ExportedRespondentInfo?
+    
+    enum CodingKeys: String, CodingKey {
+        case matchedQuestions = "matched_questions"
+        case respondentInfo = "respondent_info"
+    }
+}
+
+struct ExportedMatchedQuestion: Decodable {
+    let matchedQuestionId: Int
+    let matchedQuestion: String
+    let extractedAnswer: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case matchedQuestionId = "matched_question_id"
+        case matchedQuestion = "matched_question"
+        case extractedAnswer = "extracted_answer"
+    }
+}
+
+struct ExportedRespondentInfo: Decodable {
+    let name: String?
+    let age: Int?
+    let gender: String?
+    let phone: String?
+    let location: String?
+}
+
 // MARK: - POE API Response Models
 struct MatchedQuestion: Codable {
     let matchedQuestionId: Int

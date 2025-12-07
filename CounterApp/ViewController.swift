@@ -24,6 +24,7 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
     private var questionnaireData: QuestionnaireData?
     private var transcription: String?
     private var matchedQuestions: [MatchedQuestion] = []
+    private var respondentInfo: RespondentInfo?
     
     // MARK: - Lifecycle
     override func viewDidLoad() {
@@ -123,16 +124,32 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
     
     // MARK: - Button Actions
     @IBAction func recordButtonTapped(_ sender: UIButton) {
-        isRecording.toggle()
-        
-        if isRecording {
-            // Start recording
-            startRecording()
-        } else {
-            // Stop recording
-            stopRecording()
+        // If not recording, show info form first
+        if !isRecording {
+            // Clear previous respondent info when starting new recording
+            respondentInfo = nil
+            transcription = nil
+            matchedQuestions = []
+            
+            // Disable LLM and export buttons until new analysis is done
+            llmButton.isEnabled = true  // Can start LLM analysis after recording
+            exportButton.isEnabled = false
+            llmButton.alpha = 1.0
+            exportButton.alpha = 0.5
+            
+            showRespondentInfoForm { [weak self] info in
+                self?.respondentInfo = info
+                // Start recording after info is submitted
+                self?.isRecording = true
+                self?.startRecording()
+            }
+            animateButton(sender)
+            return
         }
         
+        // Stop recording
+        isRecording = false
+        stopRecording()
         animateButton(sender)
     }
     
@@ -269,6 +286,11 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
             return
         }
         
+        guard let respondentInfo = respondentInfo else {
+            showMessage("Missing respondent information")
+            return
+        }
+        
         // Create comprehensive JSON data
         let timestamp = Date().timeIntervalSince1970
         let dateFormatter = DateFormatter()
@@ -282,6 +304,13 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
                 "questionnaire_title": questionnaireData?.questionnaire.title ?? "Unknown"
             ],
             "timestamp": timestamp,
+            "respondent_info": [
+                "name": respondentInfo.name,
+                "age": respondentInfo.age,
+                "gender": respondentInfo.gender,
+                "phone": respondentInfo.phone,
+                "location": respondentInfo.location
+            ],
             "transcription": transcription,
             "matched_questions": matchedQuestions.map { matched in
                 [
@@ -367,17 +396,22 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
             preferredStyle: .actionSheet
         )
         
-        // Option 1: View
-        alert.addAction(UIAlertAction(title: "View", style: .default) { [weak self] _ in
+        // Option 1: View by Location
+        alert.addAction(UIAlertAction(title: "View by Location", style: .default) { [weak self] _ in
+            self?.performLocationAggregation()
+        })
+        
+        // Option 2: View All
+        alert.addAction(UIAlertAction(title: "View All", style: .default) { [weak self] _ in
             self?.performAggregation(action: .view)
         })
         
-        // Option 2: Export JSON
+        // Option 3: Export JSON
         alert.addAction(UIAlertAction(title: "Export JSON", style: .default) { [weak self] _ in
             self?.performAggregation(action: .export)
         })
         
-        // Option 3: Cancel
+        // Option 4: Cancel
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         
         // iPad support
@@ -1095,24 +1129,101 @@ class ViewController: UIViewController, AVAudioPlayerDelegate {
         
         present(alert, animated: true)
     }
-}
-
-private struct ExportedSurvey: Decodable {
-    let matchedQuestions: [ExportedMatchedQuestion]
     
-    enum CodingKeys: String, CodingKey {
-        case matchedQuestions = "matched_questions"
+    // MARK: - Respondent Info Form
+    private func showRespondentInfoForm(completion: @escaping (RespondentInfo) -> Void) {
+        let infoVC = RespondentInfoViewController()
+        infoVC.onInfoSubmitted = { [weak self] info in
+            self?.dismiss(animated: true) {
+                completion(info)
+            }
+        }
+        infoVC.onCancel = { [weak self] in
+            self?.dismiss(animated: true)
+        }
+        
+        let navController = UINavigationController(rootViewController: infoVC)
+        navController.modalPresentationStyle = .fullScreen
+        present(navController, animated: true)
+    }
+    
+    // MARK: - Location-based Aggregation
+    private func performLocationAggregation() {
+        statusLabel.text = "Aggregating by location..."
+        statusLabel.textColor = .systemBlue
+        aggregateButton.isEnabled = false
+        aggregateButton.alpha = 0.5
+        
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                let exportsDirectory = try self.ensureExportsDirectory()
+                let fileManager = FileManager.default
+                let fileURLs = try fileManager.contentsOfDirectory(at: exportsDirectory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]).filter { $0.pathExtension.lowercased() == "json" }
+                
+                if fileURLs.isEmpty {
+                    DispatchQueue.main.async {
+                        self.statusLabel.text = "No historical data available"
+                        self.statusLabel.textColor = .systemOrange
+                        self.showMessage("No export files available for aggregation")
+                        self.aggregateButton.isEnabled = true
+                        self.aggregateButton.alpha = 1.0
+                    }
+                    return
+                }
+                
+                // Group files by location
+                let decoder = JSONDecoder()
+                var locationData: [String: [ExportedSurvey]] = [:]
+                
+                for fileURL in fileURLs {
+                    do {
+                        let data = try Data(contentsOf: fileURL)
+                        let exportEntry = try decoder.decode(ExportedSurvey.self, from: data)
+                        let location = exportEntry.respondentInfo?.location ?? "Unknown Location"
+                        locationData[location, default: []].append(exportEntry)
+                    } catch {
+                        print("Failed to process file \(fileURL.lastPathComponent): \(error)")
+                    }
+                }
+                
+                if locationData.isEmpty {
+                    DispatchQueue.main.async {
+                        self.statusLabel.text = "No location data found"
+                        self.statusLabel.textColor = .systemOrange
+                        self.showMessage("No location information found in export files")
+                        self.aggregateButton.isEnabled = true
+                        self.aggregateButton.alpha = 1.0
+                    }
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    self.statusLabel.text = "Aggregation complete"
+                    self.statusLabel.textColor = .systemGreen
+                    self.aggregateButton.isEnabled = true
+                    self.aggregateButton.alpha = 1.0
+                    
+                    // Show location aggregation view
+                    let locationVC = LocationAggregationViewController()
+                    locationVC.locationData = locationData
+                    locationVC.questionnaireData = self.questionnaireData
+                    locationVC.exportsDirectory = try? self.ensureExportsDirectory()
+                    
+                    let navController = UINavigationController(rootViewController: locationVC)
+                    self.present(navController, animated: true)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.statusLabel.text = "Aggregation failed"
+                    self.statusLabel.textColor = .systemRed
+                    self.showMessage("Unable to access export directory: \(error.localizedDescription)")
+                    self.aggregateButton.isEnabled = true
+                    self.aggregateButton.alpha = 1.0
+                }
+            }
+        }
     }
 }
 
-private struct ExportedMatchedQuestion: Decodable {
-    let matchedQuestionId: Int
-    let matchedQuestion: String
-    let extractedAnswer: String?
-    
-    enum CodingKeys: String, CodingKey {
-        case matchedQuestionId = "matched_question_id"
-        case matchedQuestion = "matched_question"
-        case extractedAnswer = "extracted_answer"
-    }
-}
