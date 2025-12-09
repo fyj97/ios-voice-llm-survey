@@ -1,76 +1,214 @@
 # Questionnaire LLM iOS App
 
-This Swift-based iOS application assists field researchers in collecting qualitative feedback about specific locations or streets. It records audio, transcribes the speech, and leverages an LLM to match responses to survey questions bundled with the app.
+A Swift-based iOS application that helps field researchers collect qualitative feedback about specific locations or streets. The app can record audio, transcribe speech, and leverage LLM to match responses with questionnaire questions.
 
 ## Feature Highlights
 
 - ✅ **Audio Capture** – Start and stop recording with a single tap
 - ✅ **Immediate Playback** – Review the captured audio without leaving the app
-- ✅ **Speech-to-Text** – Convert recordings to text using Apple’s Speech framework
+- ✅ **Speech-to-Text** – Convert recordings to text using Apple's Speech framework
 - ✅ **LLM Matching** – Send transcripts to the OpenAI API and align answers with questionnaire items
 - ✅ **API Key Management** – Configure OpenAI API key through in-app settings (no code modification required)
 - ✅ **JSON Export** – Save structured results for reporting or sharing
 - ✅ **On-Device Aggregation** – Summarize previously exported survey data into human-readable stats
+- ✅ **Questionnaire Browsing** – View the complete questionnaire question list within the app
+- ✅ **Respondent Information** – Collect and manage basic information about respondents
 
 ## Project Structure
 
 ```
 CounterApp/
-├── CounterApp.xcodeproj
-├── CounterApp/
-│   ├── AppDelegate.swift
-│   ├── SceneDelegate.swift
-│   ├── ViewController.swift
-│   ├── QuestionnaireModels.swift
-│   ├── LLMService.swift
-│   ├── Base.lproj/
+├── CounterApp.xcodeproj          # Xcode project file
+├── CounterApp/                    # Main application directory
+│   ├── AppDelegate.swift          # Application delegate
+│   ├── SceneDelegate.swift       # Scene delegate
+│   ├── ViewController.swift      # Main view controller (recording and playback)
+│   ├── QuestionnaireModels.swift # Questionnaire data models
+│   ├── LLMService.swift          # LLM API service
+│   ├── QuestionnaireViewController.swift  # Questionnaire browsing view
+│   ├── QuestionPageViewController.swift    # Question detail view
+│   ├── RespondentInfoViewController.swift # Respondent information view
+│   ├── LocationAggregationViewController.swift # Data aggregation view
+│   ├── questionnaire.json        # Questionnaire configuration file
+│   ├── Base.lproj/               # Storyboard files
 │   │   ├── Main.storyboard
 │   │   └── LaunchScreen.storyboard
-│   └── Assets.xcassets/
-├── CounterAppTests/
-├── CounterAppUITests/
-├── questionnaire.json
-└── README_iOS.md
+│   └── Assets.xcassets/          # Application assets
+├── CounterAppTests/              # Unit tests
+├── CounterAppUITests/            # UI tests
+└── README.md                     # This file
 ```
 
 ## Getting Started
 
-1. Open `CounterApp.xcodeproj` in Xcode.
-2. Select a target device (simulator or physical device).
-3. Confirm that `questionnaire.json` is included in the main bundle.
-4. Build and run with **⌘ + R**.
-5. **Configure OpenAI API Key**:
+### Prerequisites
+
+- **macOS** – Required to run Xcode
+- **Xcode 15.0 or later** – For development and building the app
+- **iOS 17.0 or later** – Supports simulator or physical device
+- **Swift 5.0 or later** – Programming language version requirement
+- **OpenAI API Key** – For LLM functionality (can be configured in-app)
+
+### Running the App
+
+1. **Clone or Download the Project**
+   ```bash
+   # If cloning from GitHub
+   git clone <repository-url>
+   cd week5/CounterApp
+   ```
+
+2. **Open the Project**
+   ```bash
+   open CounterApp.xcodeproj
+   ```
+   Or double-click `CounterApp.xcodeproj` in Finder
+
+3. **Select a Target Device**
+   - Choose a target device from the top toolbar in Xcode
+   - You can select an iOS simulator (e.g., iPhone 15, iPhone 15 Pro, etc.)
+   - Or connect a physical device for testing
+
+4. **Verify Configuration Files**
+   - In Xcode's project navigator, ensure the `questionnaire.json` file is included in the `CounterApp` folder
+   - Check that the file is added to the project target (check Target Membership in File Inspector)
+
+5. **Build and Run**
+   - Press **⌘ + R** or click the Run button (▶️) in the top-left corner of Xcode
+   - The first run may take a few minutes as dependencies are downloaded and compiled
+   - If you encounter signing issues, configure your developer account in Signing & Capabilities
+
+6. **Configure OpenAI API Key**
    - After launching the app, tap the **Settings** button (⚙️) in the top-right corner of the navigation bar
    - Enter your OpenAI API key in the settings dialog
-   - You can get your API key from: https://platform.openai.com/api-keys
-   - The API key will be securely stored and persist across app launches
+   - Get your API key from: https://platform.openai.com/api-keys
+   - The API key will be securely stored in UserDefaults and persist across app launches
    - ⚠️ **Important**: You must configure the API key before using the LLM Recognition feature
+
+7. **Permission Settings**
+   - When using the recording feature for the first time, the app will request microphone permission
+   - When using the speech recognition feature for the first time, the app will request speech recognition permission
+   - Please tap "Allow" in the system permission dialog
+   - If you accidentally denied permission, you can re-authorize in Settings > Privacy & Security > Microphone/Speech Recognition
+
+## Usage Guide
+
+### Basic Workflow
+
+1. **Record Audio**
+   - Tap the "Record" button to start recording
+   - Tap again to stop recording
+   - Recording status will be displayed in the status label
+
+2. **Playback Recording**
+   - After recording, tap the "Play" button to playback the recording
+   - Ensure the recording was successful before proceeding
+
+3. **Speech-to-Text**
+   - After recording, the app will automatically perform speech recognition
+   - Transcription results will be displayed on the interface
+
+4. **LLM Matching**
+   - Tap the "LLM Recognition" button
+   - The app will send the transcription text to the OpenAI API
+   - Returns matched questionnaire questions and extracted answers
+
+5. **View Questionnaire**
+   - Tap the document icon (📄) in the navigation bar to view the complete questionnaire
+   - You can browse all questions and their types
+
+6. **Fill Respondent Information**
+   - You can fill in basic information about respondents during the questionnaire flow
+   - Includes name, age, gender, phone, and location
+
+7. **Export Data**
+   - Tap the "Export JSON" button to export survey results
+   - Files will be saved to the app's Documents directory
+   - Can be accessed through the Files app or iTunes file sharing
+
+8. **Data Aggregation**
+   - Tap the "Aggregate" button to view statistics of exported data
+   - Can aggregate multiple survey results and generate reports
 
 ## Key Concepts Covered
 
+This application covers the following core iOS development technologies:
+
 - **UIKit Fundamentals** – View controllers, storyboards, and Auto Layout
-- **Audio APIs** – Recording and playback with `AVFoundation`
-- **Speech Recognition** – Converting audio files to text via `Speech`
-- **Networking** – Calling OpenAI’s REST API with `URLSession`
-- **JSON Handling** – Decoding and encoding structured survey data
-- **File Management** – Writing export files to the app’s documents directory
-- **User Preferences** – Storing API keys securely using UserDefaults
+- **Audio APIs** – Recording and playback using `AVFoundation`
+- **Speech Recognition** – Converting audio files to text via the `Speech` framework
+- **Networking** – Calling OpenAI's REST API using `URLSession`
+- **JSON Handling** – Decoding and encoding structured survey data using the `Codable` protocol
+- **File Management** – Writing export files to the app's documents directory using `FileManager`
+- **User Preferences** – Securely storing API keys and app settings using `UserDefaults`
+- **Navigation Controller** – Managing view hierarchy using `UINavigationController`
+- **Data Models** – Defining data models using Swift structs and enums
+
+## Frequently Asked Questions
+
+**Q: Getting errors when compiling?**
+- Ensure Xcode version is 15.0 or higher
+- Check that the iOS deployment target is set to 17.0 or higher (in project settings)
+- Try cleaning the build folder: `Product > Clean Build Folder` (or press ⌘ + Shift + K)
+- If using CocoaPods or SPM, ensure dependencies are properly installed
+
+**Q: Unable to record audio?**
+- Check microphone permissions in system settings: `Settings > Privacy & Security > Microphone`
+- Ensure running on a physical device or a simulator that supports audio (some simulators may not support audio)
+- Check device volume settings
+- When testing on a physical device, ensure no other apps are using the microphone
+
+**Q: Speech recognition not working?**
+- Check speech recognition permissions in system settings: `Settings > Privacy & Security > Speech Recognition`
+- Ensure network connection is normal (some speech recognition features require network)
+- Check if running on a supported device (requires iOS 17.0+)
+- Try restarting the app
+
+**Q: LLM API call failed?**
+- Confirm that the OpenAI API key is properly configured
+- Check if network connection is normal
+- Verify that the API key is valid and has sufficient quota
+- Check error messages in Xcode console
+- Ensure the API key format is correct (starts with `sk-`)
+
+**Q: Unable to export JSON files?**
+- Check if the app has file system access permissions
+- Ensure the device has sufficient storage space
+- Check if the app's Documents directory is correctly created
+- On physical devices, exported files can be accessed through iTunes file sharing or the Files app
+
+**Q: Questionnaire data cannot be loaded?**
+- Confirm that the `questionnaire.json` file is properly added to the project bundle
+- Check if the JSON file format is correct
+- In Xcode, check if the file is in Copy Bundle Resources
+
+## Tech Stack
+
+- **Development Language**: Swift 5.0+
+- **Minimum iOS Version**: iOS 17.0
+- **Development Tool**: Xcode 15.0+
+- **Main Frameworks**:
+  - `UIKit` - User interface
+  - `AVFoundation` - Audio recording and playback
+  - `Speech` - Speech recognition
+  - `Foundation` - Basic functionality (JSON, file management, etc.)
 
 ## Suggested Extensions
 
-Want to take the project further?
+Want to take the project further? Consider the following directions:
 
-1. Add offline transcription support.
-2. Provide localized questionnaires and UI.
-3. Visualize aggregated statistics with charts.
-4. Sync exports to cloud storage.
-5. Add authentication to protect sensitive survey data.
+1. **Offline Transcription Support** – Use on-device speech recognition to reduce network dependency
+2. **Multi-language Support** – Provide localized questionnaires and interfaces
+3. **Data Visualization** – Visualize aggregated statistics using chart libraries (e.g., Charts)
+4. **Cloud Storage Sync** – Sync exported data to iCloud or other cloud storage services
+5. **Authentication** – Add user login functionality to protect sensitive survey data
+6. **Batch Export** – Support exporting multiple survey results at once
+7. **Data Search** – Add search functionality to easily find specific survey records
+8. **Export Formats** – Support exporting to other formats like CSV, PDF, etc.
 
-## Requirements
+## Contributing
 
-- iOS 17.0 or later
-- Xcode 15.0 or later
-- Swift 5.0 or later
+Welcome to submit Issues and Pull Requests to improve this project!
 
 ## License
 
