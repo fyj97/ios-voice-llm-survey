@@ -4,16 +4,16 @@ A Swift-based iOS application that helps field researchers collect qualitative f
 
 ## Feature Highlights
 
-- ✅ **Audio Capture** – Start and stop recording with a single tap
-- ✅ **Immediate Playback** – Review the captured audio without leaving the app
-- ✅ **Speech-to-Text** – Convert recordings to text using Apple's Speech framework
-- ✅ **LLM Matching** – Send transcripts to LLM API (OpenAI or Gemini) and align answers with questionnaire items
-- ✅ **Multi-API Support** – Choose between OpenAI and Gemini API providers (OpenAI recommended for better results)
-- ✅ **API Key Management** – Configure API keys for both providers through in-app settings (no code modification required)
-- ✅ **JSON Export** – Save structured results for reporting or sharing
-- ✅ **On-Device Aggregation** – Summarize previously exported survey data into human-readable stats
-- ✅ **Questionnaire Browsing** – View the complete questionnaire question list within the app
-- ✅ **Respondent Information** – Collect and manage basic information about respondents
+- **Audio Capture** – Start and stop recording with a single tap
+- **Immediate Playback** – Review the captured audio without leaving the app
+- **Speech-to-Text** – Convert recordings to text using Apple's Speech framework
+- **LLM Matching** – Send transcripts to LLM API (OpenAI or Gemini) and align answers with questionnaire items
+- **Multi-API Support** – Choose between OpenAI and Gemini API providers (OpenAI recommended for better results)
+- **API Key Management** – Configure API keys for both providers through in-app settings (no code modification required)
+- **JSON Export** – Save structured results for reporting or sharing
+- **On-Device Aggregation** – Summarize previously exported survey data into human-readable stats
+- **Questionnaire Browsing** – View the complete questionnaire question list within the app
+- **Respondent Information** – Collect and manage basic information about respondents
 
 ## Project Structure
 
@@ -78,12 +78,12 @@ CounterApp/
    - Check that the file is added to the project target (check Target Membership in File Inspector)
 
 5. **Build and Run**
-   - Press **⌘ + R** or click the Run button (▶️) in the top-left corner of Xcode
+   - Press **⌘ + R** or click the Run button in the top-left corner of Xcode
    - The first run may take a few minutes as dependencies are downloaded and compiled
    - If you encounter signing issues, configure your developer account in Signing & Capabilities
 
 6. **Configure LLM API Key**
-   - After launching the app, tap the **Settings** button (⚙️) in the top-right corner of the navigation bar
+   - After launching the app, tap the **Settings** button in the top-right corner of the navigation bar
    - **Select API Provider**: Choose between OpenAI or Gemini
      - **OpenAI** (Recommended) – Generally provides better accuracy and results for questionnaire matching
      - **Gemini** (Alternative) – Supported as an alternative option
@@ -91,7 +91,7 @@ CounterApp/
      - OpenAI API key: Get from https://platform.openai.com/api-keys
      - Gemini API key: Get from https://makersuite.google.com/app/apikey
    - The API keys will be securely stored in UserDefaults and persist across app launches
-   - ⚠️ **Important**: You must configure at least one API key before using the LLM Recognition feature
+   - **Important**: You must configure at least one API key before using the LLM Recognition feature
    - **Note**: You can configure both API keys and switch between providers at any time in settings
 
 7. **Permission Settings**
@@ -124,7 +124,7 @@ CounterApp/
    - **Note**: OpenAI is recommended for better accuracy, but you can switch to Gemini in settings if preferred
 
 5. **View Questionnaire**
-   - Tap the document icon (📄) in the navigation bar to view the complete questionnaire
+   - Tap the document icon in the navigation bar to view the complete questionnaire
    - You can browse all questions and their types
 
 6. **Fill Respondent Information**
@@ -153,47 +153,6 @@ This application covers the following core iOS development technologies:
 - **User Preferences** – Securely storing API keys and app settings using `UserDefaults`
 - **Navigation Controller** – Managing view hierarchy using `UINavigationController`
 - **Data Models** – Defining data models using Swift structs and enums
-
-## Frequently Asked Questions
-
-**Q: Getting errors when compiling?**
-- Ensure Xcode version is 15.0 or higher
-- Check that the iOS deployment target is set to 17.0 or higher (in project settings)
-- Try cleaning the build folder: `Product > Clean Build Folder` (or press ⌘ + Shift + K)
-- If using CocoaPods or SPM, ensure dependencies are properly installed
-
-**Q: Unable to record audio?**
-- Check microphone permissions in system settings: `Settings > Privacy & Security > Microphone`
-- Ensure running on a physical device or a simulator that supports audio (some simulators may not support audio)
-- Check device volume settings
-- When testing on a physical device, ensure no other apps are using the microphone
-
-**Q: Speech recognition not working?**
-- Check speech recognition permissions in system settings: `Settings > Privacy & Security > Speech Recognition`
-- Ensure network connection is normal (some speech recognition features require network)
-- Check if running on a supported device (requires iOS 17.0+)
-- Try restarting the app
-
-**Q: LLM API call failed?**
-- Confirm that the API key for the selected provider (OpenAI or Gemini) is properly configured
-- Check if network connection is normal
-- Verify that the API key is valid and has sufficient quota
-- Check error messages in Xcode console
-- For OpenAI: Ensure the API key format is correct (starts with `sk-`)
-- For Gemini: Ensure the API key format is correct
-- Try switching to the other API provider in settings if one is not working
-- **Note**: OpenAI generally provides more reliable results, so consider using OpenAI if you encounter issues with Gemini
-
-**Q: Unable to export JSON files?**
-- Check if the app has file system access permissions
-- Ensure the device has sufficient storage space
-- Check if the app's Documents directory is correctly created
-- On physical devices, exported files can be accessed through iTunes file sharing or the Files app
-
-**Q: Questionnaire data cannot be loaded?**
-- Confirm that the `questionnaire.json` file is properly added to the project bundle
-- Check if the JSON file format is correct
-- In Xcode, check if the file is in Copy Bundle Resources
 
 ## Tech Stack
 
